@@ -1,0 +1,1 @@
+FROM docker.io/kong:3.2.2

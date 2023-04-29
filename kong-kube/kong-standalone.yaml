@@ -1,0 +1,59 @@
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: kong-declarative
+data:
+  kong.yml: |
+    _format_version: "3.0"
+    _transform: true
+    services:
+    - name: example-service
+      url: http://httpbin.org/
+      tags:
+      - example
+      routes:
+      - name: example-route
+        paths:
+        - /
+    plugins:
+    - name: prometheus
+      service: example-service
+      config:
+        latency_metrics: true
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: kong-standalone
+spec:
+  containers:
+  - name: kong
+    image: kong
+    ports:
+    - containerPort: 8000
+      hostPort: 8000
+      protocol: TCP
+    env:
+    - name: KONG_DATABASE
+      value: off
+    - name: KONG_DECLARATIVE_CONFIG
+      value: /etc/kong/kong.yml
+    securityContext:
+      allowPrivilegeEscalation: true
+      capabilities:
+        drop:
+        - CAP_MKNOD
+        - CAP_NET_RAW
+        - CAP_AUDIT_WRITE
+      privileged: false
+      readOnlyRootFilesystem: false
+    volumeMounts:
+    - name: kong-declarative
+      mountPath: /etc/kong
+    tty: true
+  restartPolicy: Never
+  volumes:
+  - name: kong-declarative
+    configMap:
+      name: kong-declarative
+      
