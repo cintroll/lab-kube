@@ -1,0 +1,123 @@
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: kong-declarative
+data:
+  kong.yml: |
+    _format_version: "3.0"
+    _transform: true
+    services:
+    - name: example-service
+      url: http://httpbin.org/
+      tags:
+      - example
+      routes:
+      - name: example-route
+        paths:
+        - /
+    plugins:
+    - name: prometheus
+      service: example-service
+      config:
+        latency_metrics: true
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: kong.db
+spec:
+  containers:
+  - name: plane
+    env:
+    - name: POSTGRES_USER
+      value: kong
+    - name: POSTGRES_PASSWORD
+      value: kong
+    - name: POSTGRES_DB
+      value: kong
+    image: docker.io/library/postgres:13
+    ports:
+    - containerPort: 5432
+      hostPort: 5432
+    volumeMounts:
+    - mountPath: /var/lib/postgresql/data
+      name: plane-db-pvc
+  volumes:
+  - name: plane-db-pvc
+    persistentVolumeClaim:
+      claimName: plane-db
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: kong.control
+spec:
+  initContainers:
+  - name: init-cert
+    image: kong
+    command: ["sh", "-c", "cd /kong/cert && kong hybrid gen_cert || true"]
+    volumeMounts:
+      - name: kong-cert-pvc
+        mountPath: /kong/cert
+  - name: init-db
+    image: kong
+    command: ["sh", "-c", "sleep 10 && kong migrations bootstrap --vv"]
+    env:
+    - name: KONG_DATABASE
+      value: postgres
+    - name: KONG_PG_HOST
+      value: kong.db
+    - name: KONG_PG_PASSWORD
+      value: kong
+  containers:
+  - name: plane
+    image: kong
+    ports:
+    - containerPort: 8005
+      protocol: TCP
+    - containerPort: 8006
+      protocol: TCP
+    env: 
+    - name: KONG_ROLE
+      value: control_plane
+    - name: KONG_CLUSTER_CERT
+      value: /kong/cert/cluster.crt
+    - name: KONG_CLUSTER_CERT_KEY
+      value: /kong/cert/cluster.key
+    - name: KONGPROXY_ACCESS_LOG
+      value: /dev/stdout
+    - name: KONG_ADMIN_ACCESS_LOG
+      value: /dev/stdout
+    - name: KONG_PROXY_ERROR_LOG
+      value: /dev/stderr
+    - name: KONG_ADMIN_ERROR_LOG
+      value: /dev/stderr
+    - name: KONG_DATABASE
+      value: postgres
+    - name: KONG_PG_HOST
+      value: kong.db
+    - name: KONG_PG_PASSWORD
+      value: kong
+    volumeMounts:
+      - name: kong-cert-pvc
+        mountPath: /kong/cert
+      - name: kong-declarative
+        mountPath: /etc/kong
+    securityContext:
+      allowPrivilegeEscalation: true
+      capabilities:
+        drop:
+        - CAP_MKNOD
+        - CAP_NET_RAW
+        - CAP_AUDIT_WRITE
+      privileged: false
+      readOnlyRootFilesystem: false
+  restartPolicy: Never
+  volumes:
+  - name: kong-cert-pvc
+    persistentVolumeClaim:
+      claimName: kong-cert
+  - name: kong-declarative
+    configMap:
+      name: kong-declarative
+      
