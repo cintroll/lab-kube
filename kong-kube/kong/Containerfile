@@ -13,6 +13,13 @@ RUN yum install /tmp/kong.rpm -y \
     && ln -s /usr/local/openresty/nginx/sbin/nginx /usr/local/bin/nginx \
     && kong version
 
+RUN yum install curl -y \
+    && curl -sL https://github.com/kong/deck/releases/download/v1.19.1/deck_1.19.1_linux_amd64.tar.gz -o /tmp/deck.tar.gz \
+    && tar -xf /tmp/deck.tar.gz -C /tmp \
+    && cp /tmp/deck /usr/local/bin/ \
+    && rm -rf /var/cache/yum \
+    && rm -rf /tmp/*
+
 ADD kong-entrypoint.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/kong-entrypoint.sh
 RUN mkdir /kong \
