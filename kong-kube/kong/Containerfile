@@ -21,7 +21,9 @@ RUN yum install curl -y \
     && rm -rf /tmp/*
 
 ADD kong-entrypoint.sh /usr/local/bin/
+ADD waitport /usr/local/bin
 RUN chmod +x /usr/local/bin/kong-entrypoint.sh
+RUN chmod +x /usr/local/bin/waitport
 RUN mkdir /kong \
     && chown kong:0 /kong
 
