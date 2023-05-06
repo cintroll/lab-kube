@@ -128,13 +128,13 @@ spec:
     command: ["sh", "-c", "waitport kong.control:8001 && deck sync -s /etc/kong/kong.yml"]
     env: 
       - name: DECK_KONG_ADDR 
-        value: "kong.control:8001"
+        value: "http://kong.control:8001"
     volumeMounts:
       - name: kong-declarative-pvc
         mountPath: /etc/kong
   containers:
   - name: plane
-    image: kong-lab
+    image: docker.io/kong
     ports:
     - containerPort: 8000
       protocol: TCP
