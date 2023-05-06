@@ -1,6 +1,7 @@
-#!/usr/bin/bash
+#!/usr/bin/env bash
 
 str=$1
+echo $str
 
 hostname=${str%:*}
 port=${str#*:}
@@ -9,7 +10,7 @@ nTries=0
 result=1
 
 while true; do
-    timeout 1 bash -c '> /dev/tcp/'$hostname'/'$port'' 2> /dev/null
+    timeout 1 bash -c '> /dev/tcp/'$hostname'/'$port''
     result=$?
     nTries=$((nTries + 1))
 
