@@ -53,28 +53,25 @@ metadata:
   name: kong.control
 spec:
   initContainers:
-  - name: init-cert
-    image: kong
-    command: ["sh", "-c", "cd /kong/cert && kong hybrid gen_cert || true"]
+  - name: init-control
+    image: kong-lab
+    command: ["sh", "-c", "cd /kong/cert && kong hybrid gen_cert || true && waitport kong.db:5432 && kong migrations bootstrap --vv"]
     volumeMounts:
       - name: kong-cert-pvc
         mountPath: /kong/cert
-  - name: init-db
-    image: kong
-    command: ["sh", "-c", "waitport $KONG_PG_HOST:5432 && kong migrations bootstrap --vv"]
     env:
     - name: KONG_DATABASE
-      value: postgres
+      value: "postgres"
     - name: KONG_PG_HOST
-      value: kong.db
+      value: "kong.db"
     - name: KONG_PG_PASSWORD
-      value: kong
+      value: "kong"
   containers:
   - name: plane
-    image: kong
+    image: docker.io/kong
     ports:
     - containerPort: 8001
-      protocol: tcp
+      protocol: TCP
     - containerPort: 8005
       protocol: TCP
     - containerPort: 8006
@@ -84,7 +81,7 @@ spec:
       value: control_plane
     - name: KONG_CLUSTER_CERT
       value: /kong/cert/cluster.crt
-    - name: KONG_CLUSTER_CERT_KEY
+    - name: KONG_CLUSTER_CERT_KEY 
       value: /kong/cert/cluster.key
     - name: KONGPROXY_ACCESS_LOG
       value: /dev/stdout
@@ -127,43 +124,43 @@ metadata:
 spec:
   initContainers:
   - name: init-wait
-    image: kong
-    command: ["sh", "-c", "waitport $DECK_KONG_ADDR && deck sync -s /etc/kong/kong.yml"]
-  env: 
-    - name: DECK_KONG_ADDR 
-      value: kong.control:8001
-  volumeMounts:
-      - name: kong-declarative
+    image: kong-lab
+    command: ["sh", "-c", "waitport kong.control:8001 && deck sync -s /etc/kong/kong.yml"]
+    env: 
+      - name: DECK_KONG_ADDR 
+        value: "http://kong.control:8001"
+    volumeMounts:
+      - name: kong-declarative-pvc
         mountPath: /etc/kong
   containers:
   - name: plane
-    image: kong
+    image: docker.io/kong
     ports:
     - containerPort: 8000
-      protocol: tcp
+      protocol: TCP
     env: 
     - name: KONG_ROLE
-      value: data_plane
+      value: "data_plane"
     - name: KONG_CLUSTER_CERT
-      value: /kong/cert/cluster.crt
+      value: "/kong/cert/cluster.crt"
     - name: KONG_CLUSTER_CERT_KEY
-      value: /kong/cert/cluster.key
+      value: "/kong/cert/cluster.key"
     - name: KONGPROXY_ACCESS_LOG
-      value: /dev/stdout
+      value: "/dev/stdout"
     - name: KONG_ADMIN_ACCESS_LOG
-      value: /dev/stdout
+      value: "/dev/stdout"
     - name: KONG_PROXY_ERROR_LOG
-      value: /dev/stderr
+      value: "/dev/stderr"
     - name: KONG_ADMIN_ERROR_LOG
-      value: /dev/stderr
+      value: "/dev/stderr"
     - name: KONG_DATABASE
-      value: off
+      value: "off"
     - name: KONG_CLUSTER_CONTROL_PLANE
-      value: kong.control:8005
+      value: "kong.control:8005"
     - name: KONG_CLUSTER_TELEMETRY_ENDPOINT
-      value: kong.control:8006
+      value: "kong.control:8006"
     - name: KONG_PROXY_LISTEN
-      value: 0.0.0.0:8000
+      value: "0.0.0.0:8000"
     volumeMounts:
       - name: kong-cert-pvc
         mountPath: /kong/cert
@@ -181,6 +178,7 @@ spec:
   - name: kong-cert-pvc
     persistentVolumeClaim:
       claimName: kong-cert
-  - name: kong-declarative
+  - name: kong-declarative-pvc
     configMap:
       name: kong-declarative
+---
