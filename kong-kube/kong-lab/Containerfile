@@ -33,6 +33,8 @@ VOLUME [ "/kong" ]
 
 ENTRYPOINT ["/usr/local/bin/kong-entrypoint.sh"]
 
+CMD [ "kong", "docker-start" ]
+
 WORKDIR /kong
 
 EXPOSE 8000 8443 8001 8444 8005 8006

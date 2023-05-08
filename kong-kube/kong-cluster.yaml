@@ -24,7 +24,7 @@ data:
 apiVersion: v1
 kind: Pod
 metadata:
-  name: kong.db
+  name: kong-db
 spec:
   containers:
   - name: plane
@@ -50,12 +50,19 @@ spec:
 apiVersion: v1
 kind: Pod
 metadata:
-  name: kong.control
+  name: kong-control
 spec:
   initContainers:
   - name: init-control
-    image: kong-lab
-    command: ["sh", "-c", "cd /kong/cert && kong hybrid gen_cert || true && waitport kong.db:5432 && kong migrations bootstrap --vv"]
+    image: docker.io/cintroll/kong-lab:main
+    command: 
+    - "sh"
+    - "-c"
+    - |
+      cd /kong/cert \
+      && kong hybrid gen_cert || true \
+      && waitport $KONG_PG_HOST:5432 \
+      && for i in {1..5}; do kong migrations bootstrap --vv && break || sleep 15; done
     volumeMounts:
       - name: kong-cert-pvc
         mountPath: /kong/cert
@@ -63,12 +70,12 @@ spec:
     - name: KONG_DATABASE
       value: "postgres"
     - name: KONG_PG_HOST
-      value: "kong.db"
+      value: "kong-db"
     - name: KONG_PG_PASSWORD
       value: "kong"
   containers:
   - name: plane
-    image: docker.io/kong
+    image: docker.io/cintroll/kong-lab:main
     ports:
     - containerPort: 8001
       protocol: TCP
@@ -94,7 +101,7 @@ spec:
     - name: KONG_DATABASE
       value: postgres
     - name: KONG_PG_HOST
-      value: kong.db
+      value: kong-db
     - name: KONG_PG_PASSWORD
       value: kong
     - name: KONG_ADMIN_LISTEN
@@ -120,21 +127,21 @@ spec:
 apiVersion: v1
 kind: Pod
 metadata:
-  name: kong.data
+  name: kong-data
 spec:
   initContainers:
   - name: init-wait
-    image: kong-lab
-    command: ["sh", "-c", "waitport kong.control:8001 && deck sync -s /etc/kong/kong.yml"]
+    image: docker.io/cintroll/kong-lab:main
+    command: ["sh", "-c", "waitport kong-control:8001 && deck sync -s /etc/kong/kong.yml"]
     env: 
       - name: DECK_KONG_ADDR 
-        value: "http://kong.control:8001"
+        value: "http://kong-control:8001"
     volumeMounts:
       - name: kong-declarative-pvc
         mountPath: /etc/kong
   containers:
   - name: plane
-    image: docker.io/kong
+    image: docker.io/cintroll/kong-lab:main
     ports:
     - containerPort: 8000
       protocol: TCP
@@ -156,9 +163,9 @@ spec:
     - name: KONG_DATABASE
       value: "off"
     - name: KONG_CLUSTER_CONTROL_PLANE
-      value: "kong.control:8005"
+      value: "kong-control:8005"
     - name: KONG_CLUSTER_TELEMETRY_ENDPOINT
-      value: "kong.control:8006"
+      value: "kong-control:8006"
     - name: KONG_PROXY_LISTEN
       value: "0.0.0.0:8000"
     volumeMounts:
