@@ -35,7 +35,7 @@ spec:
       value: kong
     - name: POSTGRES_DB
       value: kong
-    image: docker.io/library/postgres:13
+    image: docker.io/library/postgres:11
     ports:
     - containerPort: 5432
       hostPort: 5432
@@ -189,3 +189,54 @@ spec:
     configMap:
       name: kong-declarative
 ---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: kong-konga
+spec:
+  initContainers:
+  - name: wait-db-migue
+    image: docker.io/cintroll/kong-lab:main
+    command: ["sh", "-c", "waitport kong-db:5432"]
+  - name: init-db
+    image: docker.io/pantsel/konga
+    command: ["sh", "/app/start.sh","-c", "prepare", "-a", "postgres", "-u", "postgresql://kong:kong@kong-db:5432/konga"]
+  containers:
+  - name: plane
+    image: docker.io/pantsel/konga
+    ports:
+    - containerPort: 1337
+      protocol: TCP
+    env: 
+    - name: KONGA_DB_HOST
+      value: kong-db
+    - name: KONG_PG_PASSWORD
+      value: kong
+    - name: KONGA_DB_USERNAME
+      value: kong
+    - name: KONGA_DB_NAME
+      value: "konga"
+    - name: NODE_ENV
+      value: "development"
+    - name: TOKEN_SECRET
+      value: "8c0405244e6f39ec1e21e0d8044520f6a32904a9c870c278a0a20686729583f7"
+    volumeMounts:
+      - name: kong-cert-pvc
+        mountPath: /kong/cert
+    securityContext:
+      allowPrivilegeEscalation: true
+      capabilities:
+        drop:
+        - CAP_MKNOD
+        - CAP_NET_RAW
+        - CAP_AUDIT_WRITE
+      privileged: false
+      readOnlyRootFilesystem: false
+  restartPolicy: Never
+  volumes:
+  - name: kong-cert-pvc
+    persistentVolumeClaim:
+      claimName: kong-cert
+  - name: kong-declarative-pvc
+    configMap:
+      name: kong-declarative
