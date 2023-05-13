@@ -8,7 +8,7 @@ data:
     _transform: true
     services:
     - name: example-service
-      url: http://httpbin.org/
+      host: example_upstream
       tags:
       - example
       routes:
@@ -22,6 +22,27 @@ data:
         latency_metrics: true
         status_code_metrics: true
         bandwidth_metrics: true
+        upstream_health_metrics: true
+    upstreams:
+    - name: example_upstream
+      targets:
+        - target: httpbin.org:80
+          weight: 100
+      healthchecks:
+        active:
+          type: http
+          healthy:
+            interval: 2
+            successes: 1
+            http_statuses: [200, 302]
+          unhealthy:
+            interval: 1
+            http_statuses: [429, 404, 500, 501, 502, 503, 504]
+            http_failures: 2
+          http_path: /
+          timeout: 1
+          concurrency: 10
+          https_verify_certificate: false
 ---
 apiVersion: v1
 kind: Pod
@@ -174,6 +195,8 @@ spec:
       value: "0.0.0.0:8000"
     - name: KONG_STATUS_LISTEN
       value: "0.0.0.0:8100"
+    - name: KONG_LOG_LEVEL
+      value: "debug"
     volumeMounts:
       - name: kong-cert-pvc
         mountPath: /kong/cert
