@@ -301,3 +301,25 @@ spec:
   - name: prom-config-pvc
     configMap:
       name: prom-config
+---        
+apiVersion: v1
+kind: Pod
+metadata:
+  name: kong-grafana
+spec:
+  containers:
+  - name: prom
+    image: docker.io/grafana/grafana
+    ports:
+    - containerPort: 3000
+      protocol: TCP
+    securityContext:
+      allowPrivilegeEscalation: true
+      capabilities:
+        drop:
+        - CAP_MKNOD
+        - CAP_NET_RAW
+        - CAP_AUDIT_WRITE
+      privileged: false
+      readOnlyRootFilesystem: false
+  restartPolicy: Never
