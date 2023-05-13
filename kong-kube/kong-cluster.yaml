@@ -20,6 +20,8 @@ data:
       service: example-service
       config:
         latency_metrics: true
+        status_code_metrics: true
+        bandwidth_metrics: true
 ---
 apiVersion: v1
 kind: Pod
@@ -145,6 +147,8 @@ spec:
     ports:
     - containerPort: 8000
       protocol: TCP
+    - containerPort: 8100
+      protocol: TCP
     env: 
     - name: KONG_ROLE
       value: "data_plane"
@@ -168,6 +172,8 @@ spec:
       value: "kong-control:8006"
     - name: KONG_PROXY_LISTEN
       value: "0.0.0.0:8000"
+    - name: KONG_STATUS_LISTEN
+      value: "0.0.0.0:8100"
     volumeMounts:
       - name: kong-cert-pvc
         mountPath: /kong/cert
@@ -240,3 +246,58 @@ spec:
   - name: kong-declarative-pvc
     configMap:
       name: kong-declarative
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: prom-config
+data:
+  prometheus.yml: |
+    # Global config
+    global:
+      scrape_interval:     15s # Set the scrape interval to every 15 seconds. Default is every 1 minute. 
+      evaluation_interval: 15s # Evaluate rules every 15 seconds. The default is every 1 minute. 
+      scrape_timeout: 15s  # scrape_timeout is set to the global default (10s).
+    # A scrape configuration containing exactly one endpoint to scrape:# Here it's Prometheus itself.
+    scrape_configs:
+      # The job name is added as a label `job=<job_name>` to any timeseries scraped from this config.
+      - job_name: 'prometheus'
+        # metrics_path defaults to '/metrics'
+        # scheme defaults to 'http'.
+        static_configs:
+        - targets: ['localhost:9090']
+
+      - job_name: 'kong'
+        # metrics_path defaults to '/metrics'
+        # scheme defaults to 'http'.
+        static_configs:
+        - targets: ['kong-data:8100']
+---        
+apiVersion: v1
+kind: Pod
+metadata:
+  name: kong-prometheus
+spec:
+  containers:
+  - name: prom
+    image: docker.io/prom/prometheus
+    ports:
+    - containerPort: 9090
+      protocol: TCP
+    volumeMounts:
+      - name: prom-config-pvc
+        mountPath: /etc/prometheus
+    securityContext:
+      allowPrivilegeEscalation: true
+      capabilities:
+        drop:
+        - CAP_MKNOD
+        - CAP_NET_RAW
+        - CAP_AUDIT_WRITE
+      privileged: false
+      readOnlyRootFilesystem: false
+  restartPolicy: Never
+  volumes:
+  - name: prom-config-pvc
+    configMap:
+      name: prom-config
