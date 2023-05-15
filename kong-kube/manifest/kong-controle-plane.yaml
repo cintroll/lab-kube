@@ -1,0 +1,157 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kong-declarative
+data:
+  kong.yml: |
+    _format_version: "3.0"
+    _transform: true
+    services:
+    - name: example-service
+      url: http://httpbin.org/
+      tags:
+      - example
+      routes:
+      - name: example-route
+        paths:
+        - /
+    plugins:
+    - name: prometheus
+      service: example-service
+      config:
+        latency_metrics: true
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: plane-db
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: kong-cert
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kong-control
+spec:
+  type: NodePort
+  selector:
+    app: kong-control
+  ports:
+    - name: admin
+      port: 8001
+      targetPort: 8001
+      nodePort: 30080
+    - name: proxy
+      port: 8000
+      targetPort: 8000
+      nodePort: 30081
+    - name: cluster
+      port: 8005
+      targetPort: 8005
+      nodePort: 30082
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kong-control
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kong
+      role: control-plane
+  template:
+    metadata:
+      labels:
+        app: kong
+        role: control-plane
+    spec:
+      initContainers:
+      - name: init-control
+        image: docker.io/cintroll/kong-lab:main
+        command: 
+        - "sh"
+        - "-c"
+        - |
+          cd /kong/cert \
+          && kong hybrid gen_cert || true \
+          && waitport $KONG_PG_HOST:5432 \
+          && for i in {1..5}; do kong migrations bootstrap --vv && break || sleep 15; done
+        volumeMounts:
+          - name: kong-cert-pvc
+            mountPath: /kong/cert
+        env:
+        - name: KONG_DATABASE
+          value: "postgres"
+        - name: KONG_PG_HOST
+          value: "kong-db"
+        - name: KONG_PG_PASSWORD
+          value: "kong"
+      containers:
+      - name: plane
+        image: docker.io/cintroll/kong-lab:main
+        ports:
+        - containerPort: 8001
+          protocol: TCP
+        - containerPort: 8005
+          protocol: TCP
+        - containerPort: 8006
+          protocol: TCP
+        env: 
+        - name: KONG_ROLE
+          value: control_plane
+        - name: KONG_CLUSTER_CERT
+          value: /kong/cert/cluster.crt
+        - name: KONG_CLUSTER_CERT_KEY 
+          value: /kong/cert/cluster.key
+        - name: KONGPROXY_ACCESS_LOG
+          value: /dev/stdout
+        - name: KONG_ADMIN_ACCESS_LOG
+          value: /dev/stdout
+        - name: KONG_PROXY_ERROR_LOG
+          value: /dev/stderr
+        - name: KONG_ADMIN_ERROR_LOG
+          value: /dev/stderr
+        - name: KONG_DATABASE
+          value: postgres
+        - name: KONG_PG_HOST
+          value: kong-db
+        - name: KONG_PG_PASSWORD
+          value: kong
+        - name: KONG_ADMIN_LISTEN
+          value: 0.0.0.0:8001
+        volumeMounts:
+          - name: kong-cert-pvc
+            mountPath: /kong/cert
+        securityContext:
+          allowPrivilegeEscalation: true
+          capabilities:
+            drop:
+            - CAP_MKNOD
+            - CAP_NET_RAW
+            - CAP_AUDIT_WRITE
+          privileged: false
+          readOnlyRootFilesystem: false
+      volumes:
+      - name: kong-cert-pvc
+        persistentVolumeClaim:
+          claimName: kong-cert
+
