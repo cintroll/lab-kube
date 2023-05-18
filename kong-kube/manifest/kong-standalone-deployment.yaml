@@ -1,0 +1,82 @@
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: kong-declarative
+data:
+  kong.yml: |
+    _format_version: "3.0"
+    _transform: true
+    services:
+    - name: example-service
+      url: http://httpbin.org/
+      tags:
+      - example
+      routes:
+      - name: example-route
+        paths:
+        - /
+    plugins:
+    - name: prometheus
+      service: example-service
+      config:
+        latency_metrics: true
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kong-dbless
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kong-dbless
+  template:
+    metadata:
+      labels:
+        app: kong-dbless
+    spec:
+      containers:
+      - name: kong
+        image: docker.io/cintroll/kong-lab:main
+        ports:
+        - containerPort: 8000
+          protocol: TCP
+        - containerPort: 8443
+          protocol: TCP
+        - containerPort: 8001
+          protocol: TCP
+        - containerPort: 8444
+          protocol: TCP
+        env:
+        - name: KONG_DATABASE
+          value: "off"
+        - name: KONG_PROXY_LISTEN
+          value: "0.0.0.0:8000, 0.0.0.0:8443 ssl"
+        - name: KONG_ADMIN_LISTEN
+          value: "0.0.0.0:8001, 0.0.0.0:8444 ssl"
+        - name: KONG_LOG_LEVEL
+          value: "debug"
+        - name: KONG_DECLARATIVE_CONFIG
+          value: /etc/kong/kong.yml
+        volumeMounts:
+        - name: kong-declarative
+          mountPath: /etc/kong
+        securityContext:
+          allowPrivilegeEscalation: true
+          capabilities:
+            drop:
+            - CAP_MKNOD
+            - CAP_NET_RAW
+            - CAP_AUDIT_WRITE
+          privileged: false
+          readOnlyRootFilesystem: false
+      volumes:
+      - name: kong-declarative
+        configMap:
+          name: kong-declarative
+
+
+
+
+
